@@ -1,38 +1,41 @@
 import requests
+import time
+import re
 
-BASE_URL = "http://localhost:8000"
+URL = "http://localhost:8000/reviews"
+TOTAL_REQUESTS = 10
 
-# --- POST reviews ---
-print("=== Posting Reviews ===")
-sample_reviews = [
-    {"email": "alice@gmail.com", "review": "Amazing food and great service"},
-    {"email": "bob@company.org", "review": "Terrible experience, very slow"},
-    {"email": "charlie@example.com", "review": "Decent place, average food"},
-    {"email": "diana@mail.com", "review": "Best pizza I have ever had"},
-    {"email": "eve@test.com", "review": "Good ambiance but overpriced"},
-]
+completed = 0
 
-for data in sample_reviews:
-    r = requests.post(f"{BASE_URL}/review", json=data)
-    print(f"POST: {r.json()}")
+print("Sending requests with interactive countdown when blocked...\n")
 
-# --- GET all reviews ---
-print("\n=== All Reviews ===")
-r = requests.get(f"{BASE_URL}/reviews")
-for rev in r.json()["reviews"]:
-    print(f"  [{rev['id']}] {rev['email']}: {rev['review']}")
+while completed < TOTAL_REQUESTS:
 
-# --- SEARCH reviews ---
-print("\n=== Search: 'pizza' ===")
-r = requests.get(f"{BASE_URL}/search", params={"q": "pizza"})
-data = r.json()
-print(f"  Found {data['matches']} match(es):")
-for rev in data["results"]:
-    print(f"  [{rev['id']}] {rev['email']}: {rev['review']}")
+    r = requests.get(URL)
 
-print("\n=== Search: 'great' ===")
-r = requests.get(f"{BASE_URL}/search", params={"q": "great"})
-data = r.json()
-print(f"  Found {data['matches']} match(es):")
-for rev in data["results"]:
-    print(f"  [{rev['id']}] {rev['email']}: {rev['review']}")
+    if r.status_code == 200:
+        completed += 1
+        print(f"Request {completed}: Success")
+
+    elif r.status_code == 429:
+
+        detail = r.json().get("detail", "")
+        print(f"\nRate limited: {detail}")
+
+        # extract seconds
+        match = re.search(r"(\d+)", detail)
+        wait_time = int(match.group(1)) if match else 10
+
+        print("Waiting...")
+
+        for sec in range(wait_time, 0, -1):
+            print(f"{sec} ", end="\r")
+            time.sleep(1)
+
+        print("Retrying...\n")
+
+    else:
+        print("Unexpected response:", r.status_code)
+        break
+
+print("\nAll requests completed successfully.")

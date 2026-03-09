@@ -22,6 +22,17 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  valkey:
+    image: valkey/valkey:latest
+    container_name: encrypted_valkey
+    ports:
+      - "6379:6379"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   app:
     build: .
     container_name: encrypted_app
@@ -35,6 +46,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      valkey:
+        condition: service_started
     logging:
       driver: json-file
       options:
