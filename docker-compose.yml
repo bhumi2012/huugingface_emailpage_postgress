@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: encrypted_pg
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "1627"
+      POSTGRES_DB: encrypted_db
+      TZ: Asia/Kolkata
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  app:
+    build: .
+    container_name: encrypted_app
+    command: ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+    env_file: .env
+    environment:
+      DB_HOST: postgres
+      TZ: Asia/Kolkata
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  pgdata:
