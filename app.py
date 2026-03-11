@@ -14,7 +14,14 @@ from pydantic import BaseModel
 from contextlib import contextmanager
 from transformers import pipeline
 
+from opentelemetry import trace
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.psycopg2 import Psycopg2Instrumentor
 
 # --------------------------------
 # Logging
@@ -61,8 +68,9 @@ logger.info("Fernet encryption initialized")
 # Rate Limiting (Valkey)
 # --------------------------------
 
-redis_client = valkey.Valkey(host="valkey", port=6379, decode_responses=True)
+REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
 
+redis_client = valkey.Valkey(host=REDIS_HOST, port=6379, decode_responses=True)
 RATE_LIMIT = 5
 WINDOW = 60
 
@@ -261,6 +269,36 @@ def get_emoji(stars, confidence):
 
     return emoji_map.get(stars, "😶")
 
+# --------------------------------
+# OpenTelemetry Tracing
+# --------------------------------
+
+SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "encrypted-review-api")
+
+resource = Resource(attributes={
+    "service.name": SERVICE_NAME
+})
+
+# create tracer provider
+provider = TracerProvider(resource=resource)
+
+# set tracer provider
+trace.set_tracer_provider(provider)
+
+# OTLP exporter (SigNoz collector)
+OTEL_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+
+otlp_exporter = OTLPSpanExporter(
+    endpoint=OTEL_ENDPOINT,
+    insecure=True
+)
+# span processor
+span_processor = BatchSpanProcessor(otlp_exporter)
+
+# attach processor to provider
+provider.add_span_processor(span_processor)
+
+
 
 # --------------------------------
 # FastAPI
@@ -273,6 +311,9 @@ app = FastAPI(
     redoc_url="/redoc" if DOCS_ENABLED else None,
     openapi_url="/openapi.json" if DOCS_ENABLED else None
 )
+
+FastAPIInstrumentor.instrument_app(app)
+Psycopg2Instrumentor().instrument()
 
 
 @app.get("/")
@@ -429,4 +470,33 @@ def search_reviews(request: Request, q: str = Query(..., min_length=1)):
         "total_scanned": len(rows),
         "matches": len(results),
         "results": results
+    }
+
+@app.get("/analytics")
+def analytics():
+
+    with get_db() as conn:
+        cur = conn.cursor()
+
+        cur.execute("SELECT encrypted_text FROM secure_data")
+        rows = cur.fetchall()
+
+        cur.close()
+
+    stars = {1:0,2:0,3:0,4:0,5:0}
+
+    for row in rows:
+        try:
+            decrypted = json.loads(cipher.decrypt(row[0].encode()).decode())
+            star = decrypted.get("stars")
+
+            if star in stars:
+                stars[star] += 1
+
+        except:
+            pass
+
+    return {
+        "total_reviews": sum(stars.values()),
+        "stars_distribution": stars
     }

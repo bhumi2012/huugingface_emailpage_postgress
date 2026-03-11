@@ -1,4 +1,5 @@
 services:
+
   postgres:
     image: postgres:16
     container_name: encrypted_pg
@@ -16,22 +17,14 @@ services:
       interval: 3s
       timeout: 3s
       retries: 10
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+
 
   valkey:
     image: valkey/valkey:latest
     container_name: encrypted_valkey
     ports:
       - "6379:6379"
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+
 
   app:
     build: .
@@ -40,7 +33,10 @@ services:
     env_file: .env
     environment:
       DB_HOST: postgres
+      REDIS_HOST: valkey
       TZ: Asia/Kolkata
+      OTEL_SERVICE_NAME: encrypted-review-api
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://host.docker.internal:4317
     ports:
       - "8000:8000"
     depends_on:
@@ -48,11 +44,7 @@ services:
         condition: service_healthy
       valkey:
         condition: service_started
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
+
 
 volumes:
   pgdata:

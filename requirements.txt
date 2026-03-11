@@ -6,3 +6,10 @@ uvicorn
 transformers
 torch
 valkey
+
+opentelemetry-api
+opentelemetry-sdk
+opentelemetry-instrumentation-fastapi
+opentelemetry-instrumentation-psycopg2
+opentelemetry-instrumentation-requests
+opentelemetry-exporter-otlp
